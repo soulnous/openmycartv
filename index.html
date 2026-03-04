@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sport TV Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; }
+        .header { background: linear-gradient(135deg, #1a1a2e, #0f3460); padding: 18px; text-align: center; border-bottom: 2px solid #e94560; }
+        .header h1 { font-size: 24px; }
+
+        .player-section { display: none; background: #000; max-width: 900px; margin: 0 auto; }
+        .player-section.active { display: block; }
+        .player-section video { width: 100%; max-height: 500px; background: #000; }
+        .player-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: #111; }
+        .player-bar .title { font-size: 15px; font-weight: 600; }
+        .player-bar .close-btn { background: #e94560; border: none; color: #fff; padding: 5px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .player-bar .close-btn:hover { background: #c73652; }
+        .error-msg { display: none; background: #3a1a1a; color: #ff6b6b; padding: 8px; font-size: 13px; text-align: center; }
+        .error-msg.visible { display: block; }
+
+        .group-title { font-size: 16px; color: #e94560; padding: 14px 20px 6px; border-bottom: 1px solid #222; margin-top: 10px; }
+        .channels { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; padding: 10px 20px; max-width: 1000px; margin: 0 auto; }
+        .ch {
+            background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
+            padding: 14px; text-align: center; cursor: pointer; transition: all 0.2s;
+        }
+        .ch:hover { border-color: #e94560; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(233,69,96,0.2); }
+        .ch.playing { border-color: #e94560; background: #1a1020; }
+        .ch .name { font-size: 14px; font-weight: 600; }
+        .ch .url { font-size: 10px; color: #555; margin-top: 4px; word-break: break-all; }
+        .ch .status { font-size: 10px; margin-top: 5px; padding: 2px 8px; border-radius: 10px; display: inline-block; }
+        .status.live { background: #1a3a1a; color: #4caf50; }
+        .status.error { background: #3a1a1a; color: #ff6b6b; }
+        .status.loading { background: #3a3a1a; color: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="header"><h1>Sport TV Test</h1></div>
+    <div class="player-section" id="playerSection">
+        <video id="video" controls autoplay></video>
+        <div class="error-msg" id="errorMsg"></div>
+        <div class="player-bar">
+            <span class="title" id="playerTitle"></span>
+            <button class="close-btn" onclick="closePlayer()">X</button>
+        </div>
+    </div>
+    <div id="content"></div>
+
+    <script>
+    const groups = [
+        {
+            name: "185.132.134.159",
+            channels: [
+                { name: "Sport 1", url: "/stream185/sport1/index.m3u8" },
+                { name: "Sport 2", url: "/stream185/sport2/index.m3u8" },
+                { name: "Sport 3", url: "/stream185/sport3/index.m3u8" },
+                { name: "Sport 4", url: "/stream185/sport4/index.m3u8" },
+                { name: "Sport 5", url: "/stream185/sport5/index.m3u8" },
+                { name: "Sport 6", url: "/stream185/sport6/index.m3u8" }
+            ]
+        },
+        {
+            name: "dienalt.org",
+            channels: [
+                { name: "Sport 5", url: "/streamdienalt/iptv/DV3AC2Q6YSR9XE/2558/index.m3u8" }
+            ]
+        },
+        {
+            name: "77.137.40.221",
+            channels: [
+                { name: "Sport 1", url: "/stream77/play/a016" },
+                { name: "Sport 2", url: "/stream77/play/a019" },
+                { name: "Sport 3", url: "/stream77/play/a01a" },
+                { name: "Sport 4", url: "/stream77/play/a01b" },
+                { name: "Sport 5", url: "/stream77/play/a01c" },
+                { name: "Sport ONE HD", url: "/stream77/play/a01d" },
+                { name: "Sport ONE 2 HD", url: "/stream77/play/a01f" },
+                { name: "Sport 5 Live HD", url: "/stream77/play/a00i" },
+                { name: "Sport 5 Plus HD", url: "/stream77/play/a001" }
+            ]
+        }
+    ];
+
+    let hls = null;
+    let playingId = null;
+
+    function render() {
+        const el = document.getElementById('content');
+        let html = '';
+        let id = 0;
+        groups.forEach(g => {
+            html += `<div class="group-title">${g.name}</div><div class="channels">`;
+            g.channels.forEach(ch => {
+                html += `<div class="ch" id="ch-${id}" onclick="play(${id})">
+                    <div class="name">${ch.name}</div>
+                    <div class="url">${g.name}</div>
+                    <div class="status" id="st-${id}"></div>
+                </div>`;
+                id++;
+            });
+            html += '</div>';
+        });
+        el.innerHTML = html;
+    }
+
+    function getAllChannels() {
+        const all = [];
+        groups.forEach(g => g.channels.forEach(ch => all.push(ch)));
+        return all;
+    }
+
+    function play(id) {
+        const ch = getAllChannels()[id];
+        playingId = id;
+        document.querySelectorAll('.ch').forEach(c => c.classList.remove('playing'));
+        document.getElementById('ch-' + id).classList.add('playing');
+
+        const section = document.getElementById('playerSection');
+        section.classList.add('active');
+        document.getElementById('playerTitle').textContent = ch.name;
+        document.getElementById('errorMsg').className = 'error-msg';
+        setSt(id, 'loading', 'loading...');
+
+        const video = document.getElementById('video');
+        if (hls) { hls.destroy(); hls = null; }
+
+        if (Hls.isSupported()) {
+            hls = new Hls({ enableWorker: true, xhrSetup: x => { x.timeout = 10000; } });
+            hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(()=>{}); setSt(id, 'live', 'LIVE'); });
+            hls.on(Hls.Events.ERROR, (_, d) => {
+                if (d.fatal) { setSt(id, 'error', 'error'); showErr(d.type + ': ' + (d.reason||d.details)); }
+            });
+            hls.loadSource(ch.url);
+            hls.attachMedia(video);
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = ch.url;
+            video.onloadedmetadata = () => { video.play().catch(()=>{}); setSt(id, 'live', 'LIVE'); };
+            video.onerror = () => { setSt(id, 'error', 'error'); showErr('playback failed'); };
+        }
+        section.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function closePlayer() {
+        if (hls) { hls.destroy(); hls = null; }
+        const v = document.getElementById('video'); v.pause(); v.removeAttribute('src');
+        document.getElementById('playerSection').classList.remove('active');
+        document.querySelectorAll('.ch').forEach(c => c.classList.remove('playing'));
+        playingId = null;
+    }
+
+    function setSt(id, type, text) {
+        const el = document.getElementById('st-' + id);
+        if (el) { el.className = 'status ' + type; el.textContent = text; }
+    }
+
+    function showErr(msg) {
+        const el = document.getElementById('errorMsg');
+        el.textContent = msg; el.className = 'error-msg visible';
+    }
+
+    render();
+    </script>
+</body>
+</html>
